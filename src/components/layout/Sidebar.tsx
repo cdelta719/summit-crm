@@ -21,6 +21,7 @@ export default function Sidebar() {
     { key: 'emails' as const, label: 'Email Templates', icon: '📧' },
     { key: 'training' as const, label: 'Training', icon: '📚' },
     { key: 'tickets' as const, label: 'HelpDesk', icon: '🎫' },
+    { key: 'businessplan' as const, label: 'Business Plan', icon: '📋' },
   ];
 
   return (

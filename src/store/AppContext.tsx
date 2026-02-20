@@ -6,7 +6,7 @@ import { loadFilterPresets, saveFilterPresets, loadSettings, saveSettings, fromD
 import { localDB } from '../utils/local-storage';
 import { useAuth } from './AuthContext';
 
-type View = 'pipeline' | 'list' | 'dashboard' | 'detail' | 'team' | 'profile' | 'tickets' | 'clients' | 'contracts' | 'reports' | 'training' | 'tasks' | 'revenue' | 'emails' | 'leaderboard' | 'meetings';
+type View = 'pipeline' | 'list' | 'dashboard' | 'detail' | 'team' | 'profile' | 'tickets' | 'clients' | 'contracts' | 'reports' | 'training' | 'tasks' | 'revenue' | 'emails' | 'leaderboard' | 'meetings' | 'businessplan';
 
 interface State {
   leads: Lead[];
