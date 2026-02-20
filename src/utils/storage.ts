@@ -27,7 +27,7 @@ export function saveSettings(settings: AppSettings) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 }
 
-// --- Supabase <-> Frontend mapping ---
+// --- localStorage <-> Frontend mapping ---
 
 export function fromDbLead(row: Record<string, unknown>): Lead {
   return {

@@ -2,8 +2,8 @@ import { createContext, useContext, useReducer, useEffect, useCallback, useRef, 
 import { v4 as uuidv4 } from 'uuid';
 import type { Lead, Filters, FilterPreset, AppSettings, PipelineStage, Activity } from '../types';
 import { DEFAULT_FILTERS } from '../types';
-import { loadFilterPresets, saveFilterPresets, loadSettings, saveSettings, fromDbLead, toDbLead, fromDbNote, fromDbActivity } from '../utils/storage';
-import { supabase } from '../utils/supabase';
+import { loadFilterPresets, saveFilterPresets, loadSettings, saveSettings, fromDbLead, toDbLead } from '../utils/storage';
+import { localDB } from '../utils/local-storage';
 import { useAuth } from './AuthContext';
 
 type View = 'pipeline' | 'list' | 'dashboard' | 'detail' | 'team' | 'profile' | 'tickets' | 'clients' | 'contracts' | 'reports' | 'training' | 'tasks' | 'revenue' | 'emails' | 'leaderboard' | 'meetings';
@@ -133,12 +133,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => { saveFilterPresets(state.filterPresets); }, [state.filterPresets]);
   useEffect(() => { saveSettings(state.settings); }, [state.settings]);
 
-  // Load leads from Supabase
+  // Load leads from localStorage
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const { data: leadsData, error } = await supabase
+        const { data: leadsData, error } = await localDB
           .from('leads')
           .select('*, notes(*), activities(*)');
         if (error) { console.error('Failed to load leads:', error); dispatch({ type: 'SET_LOADING', loading: false }); return; }
@@ -159,56 +159,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, []);
 
-  // Real-time subscriptions
-  useEffect(() => {
-    const channel = supabase.channel('summit-crm')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, async (payload) => {
-        if (payload.eventType === 'DELETE') {
-          dispatch({ type: 'DELETE_LEAD', id: (payload.old as Record<string, unknown>).id as string });
-        } else if (payload.eventType === 'INSERT') {
-          const row = payload.new as Record<string, unknown>;
-          // Fetch with notes/activities
-          const { data } = await supabase.from('leads').select('*, notes(*), activities(*)').eq('id', row.id).single();
-          if (data) {
-            const lead = fromDbLead(data as Record<string, unknown>);
-            // Only add if not already in state
-            if (!stateRef.current.leads.find(l => l.id === lead.id)) {
-              dispatch({ type: 'ADD_LEAD', lead });
-            }
-          }
-        } else if (payload.eventType === 'UPDATE') {
-          const row = payload.new as Record<string, unknown>;
-          const { data } = await supabase.from('leads').select('*, notes(*), activities(*)').eq('id', row.id).single();
-          if (data) {
-            const lead = fromDbLead(data as Record<string, unknown>);
-            lead.notes.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-            lead.activities.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-            dispatch({ type: 'UPDATE_LEAD', lead });
-          }
-        }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'notes' }, async (payload) => {
-        const row = (payload.eventType === 'DELETE' ? payload.old : payload.new) as Record<string, unknown>;
-        const leadId = row.lead_id as string;
-        if (!leadId) return;
-        const { data } = await supabase.from('notes').select('*').eq('lead_id', leadId).order('created_at', { ascending: false });
-        if (data) {
-          dispatch({ type: 'UPDATE_LEAD_NOTES', leadId, notes: data.map(r => fromDbNote(r as Record<string, unknown>)) });
-        }
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'activities' }, async (payload) => {
-        const row = (payload.eventType === 'DELETE' ? payload.old : payload.new) as Record<string, unknown>;
-        const leadId = row.lead_id as string;
-        if (!leadId) return;
-        const { data } = await supabase.from('activities').select('*').eq('lead_id', leadId).order('created_at', { ascending: false });
-        if (data) {
-          dispatch({ type: 'UPDATE_LEAD_ACTIVITIES', leadId, activities: data.map(r => fromDbActivity(r as Record<string, unknown>)) });
-        }
-      })
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, []);
+  // No real-time subscriptions needed with localStorage
 
   const addLead = useCallback(async (data: Partial<Lead>) => {
     const now = new Date().toISOString();
@@ -240,15 +191,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
     lead.id = id; // ensure id is ours
 
-    // Insert lead into Supabase
+    // Insert lead into localStorage
     const dbLead = toDbLead(lead);
     dbLead.created_at = now;
-    const { error } = await supabase.from('leads').insert(dbLead);
+    const { error } = await localDB.from('leads').insert(dbLead);
     if (error) { console.error('Failed to create lead:', error); alert('Failed to create lead: ' + error.message); return; }
 
     // Insert creation activity
     const actId = uuidv4();
-    await supabase.from('activities').insert({
+    await localDB.from('activities').insert({
       id: actId, lead_id: id, type: 'Note', description: 'Lead created',
       user_id: currentUser?.id, user_name: currentUser?.name, created_at: now,
     });
@@ -263,7 +214,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     lead.lastEditedAt = now;
 
     const dbLead = toDbLead(lead);
-    const { error } = await supabase.from('leads').update(dbLead).eq('id', lead.id);
+    const { error } = await localDB.from('leads').update(dbLead).eq('id', lead.id);
     if (error) { console.error('Failed to update lead:', error); alert('Failed to update lead: ' + error.message); return; }
 
     // Handle notes - check if any new notes need inserting
@@ -271,7 +222,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const existingNoteIds = new Set(existingLead?.notes.map(n => n.id) || []);
     const newNotes = lead.notes.filter(n => !existingNoteIds.has(n.id));
     for (const note of newNotes) {
-      await supabase.from('notes').insert({
+      await localDB.from('notes').insert({
         id: note.id, lead_id: lead.id, content: note.content,
         user_id: note.userId, user_name: note.userName, created_at: note.createdAt,
       });
@@ -281,7 +232,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [currentUser]);
 
   const deleteLead = useCallback(async (id: string) => {
-    const { error } = await supabase.from('leads').delete().eq('id', id);
+    const { error } = await localDB.from('leads').delete().eq('id', id);
     if (error) { console.error('Failed to delete lead:', error); alert('Failed to delete lead: ' + error.message); return; }
     dispatch({ type: 'DELETE_LEAD', id });
   }, []);
@@ -291,8 +242,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const lead = stateRef.current.leads.find(l => l.id === id);
     if (!lead || lead.pipelineStage === stage) return;
 
-    // Update in Supabase
-    await supabase.from('leads').update({
+    // Update in localStorage
+    await localDB.from('leads').update({
       pipeline_stage: stage,
       stage_entered_date: now,
       last_edited_by: currentUser?.name,
@@ -305,7 +256,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const stageName = stage.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     const desc = currentUser ? `${currentUser.name} moved to ${stageName}` : `Moved to ${stageName}`;
     const actId = uuidv4();
-    await supabase.from('activities').insert({
+    await localDB.from('activities').insert({
       id: actId, lead_id: id, type: 'Stage Change', description: desc,
       user_id: currentUser?.id, user_name: currentUser?.name, created_at: now,
     });
@@ -323,7 +274,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const addActivity = useCallback(async (leadId: string, type: Activity['type'], description: string) => {
     const now = new Date().toISOString();
     const actId = uuidv4();
-    await supabase.from('activities').insert({
+    await localDB.from('activities').insert({
       id: actId, lead_id: leadId, type, description,
       user_id: currentUser?.id, user_name: currentUser?.name, created_at: now,
     });

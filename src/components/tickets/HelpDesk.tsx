@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../../utils/supabase';
+import { localDB } from '../../utils/local-storage';
 import { useAuth } from '../../store/AuthContext';
 
 interface Ticket {
@@ -25,7 +25,7 @@ export default function HelpDesk() {
   const [filter, setFilter] = useState<'all' | 'open' | 'resolved'>('all');
 
   const fetchTickets = useCallback(async () => {
-    const { data } = await supabase
+    const { data } = await localDB
       .from('tickets')
       .select('*')
       .order('created_at', { ascending: false });
@@ -35,17 +35,17 @@ export default function HelpDesk() {
 
   useEffect(() => {
     fetchTickets();
-    const channel = supabase.channel('tickets-realtime')
+    const channel = localDB.channel('tickets-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, () => {
         fetchTickets();
       })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { localDB.removeChannel(channel); };
   }, [fetchTickets]);
 
   const handleAddTicket = async () => {
     if (!newProblem.trim() || !currentUser) return;
-    await supabase.from('tickets').insert({
+    await localDB.from('tickets').insert({
       problem: newProblem.trim(),
       solution: '',
       resolved: false,
@@ -59,7 +59,7 @@ export default function HelpDesk() {
 
   const handleToggleResolved = async (ticket: Ticket) => {
     const newResolved = !ticket.resolved;
-    await supabase.from('tickets').update({
+    await localDB.from('tickets').update({
       resolved: newResolved,
       resolved_at: newResolved ? new Date().toISOString() : null,
     }).eq('id', ticket.id);
@@ -68,7 +68,7 @@ export default function HelpDesk() {
 
   const handleSaveSolution = async () => {
     if (!selectedTicket) return;
-    await supabase.from('tickets').update({
+    await localDB.from('tickets').update({
       solution: solutionText,
     }).eq('id', selectedTicket.id);
     setSelectedTicket(null);

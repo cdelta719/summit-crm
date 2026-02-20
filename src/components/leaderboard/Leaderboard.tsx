@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../../utils/supabase';
+import { localDB } from '../../utils/local-storage';
 import { useApp } from '../../store/AppContext';
 
 type TimeRange = 'week' | 'month' | 'all';
@@ -23,9 +23,9 @@ export default function Leaderboard() {
     setLoading(true);
     const start = getStart(timeRange);
     const [actRes, revRes, taskRes] = await Promise.all([
-      supabase.from('activities').select('*').gte('created_at', start),
-      supabase.from('revenue').select('*').gte('date', start).eq('status', 'Paid'),
-      supabase.from('tasks').select('*').eq('status', 'done').gte('completed_at', start),
+      localDB.from('activities').select('*').gte('created_at', start),
+      localDB.from('revenue').select('*').gte('date', start).eq('status', 'Paid'),
+      localDB.from('tasks').select('*').eq('status', 'done').gte('completed_at', start),
     ]);
     if (actRes.data) setActivities(actRes.data);
     if (revRes.data) setRevenue(revRes.data);

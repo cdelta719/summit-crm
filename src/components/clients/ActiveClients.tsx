@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../../utils/supabase';
+import { localDB } from '../../utils/local-storage';
 import { useAuth } from '../../store/AuthContext';
 import MeetingNotesSection, { DEFAULT_LEAD_TYPES, CLIENT_EXTRA_TYPES } from '../meetings/MeetingNotesSection';
 
@@ -99,7 +99,7 @@ export default function ActiveClients() {
   const [editMode, setEditMode] = useState(false);
 
   const fetchClients = useCallback(async () => {
-    const { data } = await supabase
+    const { data } = await localDB
       .from('clients')
       .select('*, client_notes(*)')
       .order('created_at', { ascending: false });
@@ -117,16 +117,16 @@ export default function ActiveClients() {
 
   useEffect(() => {
     fetchClients();
-    const channel = supabase.channel('clients-realtime')
+    const channel = localDB.channel('clients-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'clients' }, () => fetchClients())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'client_notes' }, () => fetchClients())
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { localDB.removeChannel(channel); };
   }, [fetchClients]);
 
   const handleAdd = async () => {
     if (!formData.company_name?.trim() || !currentUser) return;
-    await supabase.from('clients').insert({
+    await localDB.from('clients').insert({
       ...formData,
       created_by: currentUser.id,
       created_by_name: currentUser.name,
@@ -144,14 +144,14 @@ export default function ActiveClients() {
     delete updateData.created_at;
     delete updateData.created_by;
     delete updateData.created_by_name;
-    await supabase.from('clients').update(updateData).eq('id', selectedClient.id);
+    await localDB.from('clients').update(updateData).eq('id', selectedClient.id);
     setEditMode(false);
     fetchClients();
   };
 
   const handleAddNote = async () => {
     if (!newNote.trim() || !selectedClient || !currentUser) return;
-    await supabase.from('client_notes').insert({
+    await localDB.from('client_notes').insert({
       client_id: selectedClient.id,
       content: newNote.trim(),
       note_type: noteType,

@@ -3,7 +3,7 @@ import Modal from '../common/Modal';
 import { useApp } from '../../store/AppContext';
 import { useAuth } from '../../store/AuthContext';
 import { parseCSV } from '../../utils/csv';
-import { supabase } from '../../utils/supabase';
+import { localDB } from '../../utils/local-storage';
 import { toDbLead } from '../../utils/storage';
 import type { Lead } from '../../types';
 
@@ -39,7 +39,7 @@ export default function ImportModal() {
         db.last_edited_at = now;
         return db;
       });
-      const { error } = await supabase.from('leads').insert(dbLeads);
+      const { error } = await localDB.from('leads').insert(dbLeads);
       if (error) { alert('Import failed: ' + error.message); setImporting(false); return; }
 
       // Insert activities for each lead
@@ -52,7 +52,7 @@ export default function ImportModal() {
         user_name: currentUser?.name,
         created_at: now,
       }));
-      await supabase.from('activities').insert(activities);
+      await localDB.from('activities').insert(activities);
 
       // Insert notes
       const notes = parsed.flatMap(l => l.notes.map(n => ({
@@ -63,7 +63,7 @@ export default function ImportModal() {
         user_name: currentUser?.name,
         created_at: n.createdAt || now,
       })));
-      if (notes.length > 0) await supabase.from('notes').insert(notes);
+      if (notes.length > 0) await localDB.from('notes').insert(notes);
 
       dispatch({ type: 'IMPORT_LEADS', leads: parsed });
       setParsed(null);

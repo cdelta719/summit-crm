@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../../utils/supabase';
+import { localDB } from '../../utils/local-storage';
 import { useAuth } from '../../store/AuthContext';
 import { useApp } from '../../store/AppContext';
 import { TEAM_MEMBERS } from '../../types';
@@ -48,17 +48,17 @@ export default function TaskManager() {
   });
 
   const fetchTasks = useCallback(async () => {
-    const { data } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
+    const { data } = await localDB.from('tasks').select('*').order('created_at', { ascending: false });
     if (data) setTasks(data);
     setLoading(false);
   }, []);
 
   useEffect(() => {
     fetchTasks();
-    const channel = supabase.channel('tasks-rt')
+    const channel = localDB.channel('tasks-rt')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, () => fetchTasks())
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { localDB.removeChannel(channel); };
   }, [fetchTasks]);
 
   const openAdd = (member?: string) => {
@@ -76,12 +76,12 @@ export default function TaskManager() {
   const handleSave = async () => {
     if (!form.title.trim() || !currentUser) return;
     if (editTask) {
-      await supabase.from('tasks').update({
+      await localDB.from('tasks').update({
         title: form.title, description: form.description, assigned_to: form.assigned_to,
         due_date: form.due_date || null, priority: form.priority, lead_id: form.lead_id || null,
       }).eq('id', editTask.id);
     } else {
-      await supabase.from('tasks').insert({
+      await localDB.from('tasks').insert({
         title: form.title, description: form.description, assigned_to: form.assigned_to,
         due_date: form.due_date || null, priority: form.priority, lead_id: form.lead_id || null,
         status: 'todo', created_by: currentUser.id, created_by_name: currentUser.name,
@@ -96,12 +96,12 @@ export default function TaskManager() {
     const updates: Record<string, unknown> = { status: next };
     if (next === 'done') updates.completed_at = new Date().toISOString();
     else updates.completed_at = null;
-    await supabase.from('tasks').update(updates).eq('id', t.id);
+    await localDB.from('tasks').update(updates).eq('id', t.id);
     fetchTasks();
   };
 
   const deleteTask = async (id: string) => {
-    await supabase.from('tasks').delete().eq('id', id);
+    await localDB.from('tasks').delete().eq('id', id);
     fetchTasks();
   };
 

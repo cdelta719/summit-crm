@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../../utils/supabase';
+import { localDB } from '../../utils/local-storage';
 import { useAuth } from '../../store/AuthContext';
 
 interface RevenueEntry {
@@ -32,22 +32,22 @@ export default function RevenueTracker() {
   const [form, setForm] = useState({ company_name: '', type: 'Setup Fee', amount: '', date: '', status: 'Paid', notes: '' });
 
   const fetchEntries = useCallback(async () => {
-    const { data } = await supabase.from('revenue').select('*').order('date', { ascending: false });
+    const { data } = await localDB.from('revenue').select('*').order('date', { ascending: false });
     if (data) setEntries(data);
     setLoading(false);
   }, []);
 
   useEffect(() => {
     fetchEntries();
-    const channel = supabase.channel('revenue-rt')
+    const channel = localDB.channel('revenue-rt')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'revenue' }, () => fetchEntries())
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { localDB.removeChannel(channel); };
   }, [fetchEntries]);
 
   const handleAdd = async () => {
     if (!form.company_name.trim() || !form.amount || !currentUser) return;
-    await supabase.from('revenue').insert({
+    await localDB.from('revenue').insert({
       company_name: form.company_name, type: form.type, amount: parseFloat(form.amount),
       date: form.date || new Date().toISOString().slice(0, 10), status: form.status, notes: form.notes,
       created_by: currentUser.id, created_by_name: currentUser.name,

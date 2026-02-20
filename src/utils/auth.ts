@@ -41,7 +41,7 @@ export function getTeamMemberNames(): string[] {
   return PROFILES.map(p => p.name);
 }
 
-// Convert a Supabase profile row to a User object
+// Convert a localStorage profile row to a User object
 export function profileToUser(profile: Record<string, unknown>): User {
   return {
     id: profile.id as string,

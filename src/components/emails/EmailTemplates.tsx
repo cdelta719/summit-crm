@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../../utils/supabase';
+import { localDB } from '../../utils/local-storage';
 import { useAuth } from '../../store/AuthContext';
 
 interface EmailTemplate {
@@ -61,7 +61,7 @@ export default function EmailTemplates() {
   };
 
   const fetchTemplates = useCallback(async () => {
-    const { data } = await supabase.from('email_templates').select('*').order('category', { ascending: true });
+    const { data } = await localDB.from('email_templates').select('*').order('category', { ascending: true });
     if (data) {
       setTemplates(data);
       // Seed defaults if empty
@@ -69,8 +69,8 @@ export default function EmailTemplates() {
         const inserts = DEFAULT_TEMPLATES.map(t => ({
           ...t, created_by: currentUser.id, created_by_name: currentUser.name,
         }));
-        await supabase.from('email_templates').insert(inserts);
-        const { data: seeded } = await supabase.from('email_templates').select('*').order('category', { ascending: true });
+        await localDB.from('email_templates').insert(inserts);
+        const { data: seeded } = await localDB.from('email_templates').select('*').order('category', { ascending: true });
         if (seeded) setTemplates(seeded);
       }
     }
@@ -81,7 +81,7 @@ export default function EmailTemplates() {
 
   const handleAdd = async () => {
     if (!form.name.trim() || !form.subject.trim() || !currentUser) return;
-    await supabase.from('email_templates').insert({
+    await localDB.from('email_templates').insert({
       name: form.name, category: form.category, subject: form.subject, body: form.body,
       created_by: currentUser.id, created_by_name: currentUser.name,
     });

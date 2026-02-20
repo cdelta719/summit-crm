@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../../utils/supabase';
+import { localDB } from '../../utils/local-storage';
 import { useAuth } from '../../store/AuthContext';
 
 interface MeetingNote {
@@ -42,17 +42,17 @@ export default function MeetingNotes() {
   const [form, setForm] = useState(emptyForm);
 
   const fetchNotes = useCallback(async () => {
-    const { data } = await supabase.from('meeting_notes').select('*').order('meeting_date', { ascending: false });
+    const { data } = await localDB.from('meeting_notes').select('*').order('meeting_date', { ascending: false });
     if (data) setNotes(data);
     setLoading(false);
   }, []);
 
   useEffect(() => {
     fetchNotes();
-    const channel = supabase.channel('meetings-rt')
+    const channel = localDB.channel('meetings-rt')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'meeting_notes' }, () => fetchNotes())
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { localDB.removeChannel(channel); };
   }, [fetchNotes]);
 
   const openAdd = () => {
@@ -81,9 +81,9 @@ export default function MeetingNotes() {
       notes: form.notes, outcome: form.outcome,
     };
     if (editNote) {
-      await supabase.from('meeting_notes').update(payload).eq('id', editNote.id);
+      await localDB.from('meeting_notes').update(payload).eq('id', editNote.id);
     } else {
-      await supabase.from('meeting_notes').insert({
+      await localDB.from('meeting_notes').insert({
         ...payload, created_by: currentUser.id, created_by_name: currentUser.name,
       });
     }

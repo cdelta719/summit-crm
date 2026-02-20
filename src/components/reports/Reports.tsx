@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../../utils/supabase';
+import { localDB } from '../../utils/local-storage';
 import { useApp } from '../../store/AppContext';
 import { PIPELINE_STAGES } from '../../types';
 
@@ -34,8 +34,8 @@ export default function Reports() {
     setLoading(true);
     const { start, end } = getDateRange(timeRange);
     const [revRes, actRes] = await Promise.all([
-      supabase.from('revenue').select('*').gte('date', start).lte('date', end),
-      supabase.from('activities').select('*').gte('created_at', start).lte('created_at', end),
+      localDB.from('revenue').select('*').gte('date', start).lte('date', end),
+      localDB.from('activities').select('*').gte('created_at', start).lte('created_at', end),
     ]);
     if (revRes.data) setRevenue(revRes.data);
     if (actRes.data) setActivities(actRes.data);

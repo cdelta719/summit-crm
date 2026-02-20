@@ -1,10 +1,37 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
 import type { User, UserRole } from '../types';
 import { PROFILES } from '../types';
-import { supabase } from '../utils/supabase';
 import {
   hashPin, setSession, clearSession, getSessionUserId, profileToUser,
 } from '../utils/auth';
+
+const PROFILES_KEY = 'summit_crm_profiles';
+
+// Default CD PIN hash for '6411' with salt 'summit_crm_salt_v1'
+const DEFAULT_CD_PIN_HASH = 'ddd7f04a443bac4d755c75dd795e2e17f1fb4e12be086ab2dfeac34cd7557097';
+
+function loadProfiles(): Record<string, unknown>[] {
+  try {
+    const raw = localStorage.getItem(PROFILES_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch { /* ignore */ }
+  // Seed with default CD profile
+  const seed = PROFILES.map(p => ({
+    id: p.id,
+    name: p.name,
+    role: p.role,
+    color: p.color,
+    pin_hash: p.id === 'cd' ? DEFAULT_CD_PIN_HASH : null,
+    created_at: new Date().toISOString(),
+    last_login_at: null,
+  }));
+  localStorage.setItem(PROFILES_KEY, JSON.stringify(seed));
+  return seed;
+}
+
+function saveProfiles(profiles: Record<string, unknown>[]) {
+  localStorage.setItem(PROFILES_KEY, JSON.stringify(profiles));
+}
 
 interface AuthContextValue {
   currentUser: User | null;
@@ -29,38 +56,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [profileHashes, setProfileHashes] = useState<Record<string, string>>({});
 
-  // Load profiles from Supabase on mount
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { data, error } = await supabase.from('profiles').select('*');
-        if (error) { console.error('Failed to load profiles:', error); setLoading(false); return; }
-        if (cancelled) return;
-        const profiles = data || [];
-        const userList = profiles.map(profileToUser);
-        setUsers(userList);
+    const profiles = loadProfiles();
+    const userList = profiles.map(profileToUser);
+    setUsers(userList);
 
-        // Build hash map for PIN checks
-        const hashes: Record<string, string> = {};
-        for (const p of profiles) {
-          if (p.pin_hash) hashes[p.id] = p.pin_hash;
-        }
-        setProfileHashes(hashes);
+    const hashes: Record<string, string> = {};
+    for (const p of profiles) {
+      if (p.pin_hash) hashes[p.id as string] = p.pin_hash as string;
+    }
+    setProfileHashes(hashes);
 
-        // Restore session
-        const sessionId = getSessionUserId();
-        if (sessionId) {
-          const u = userList.find(u => u.id === sessionId);
-          if (u) setCurrentUser(u);
-        }
-      } catch (err) {
-        console.error('Auth init error:', err);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
+    const sessionId = getSessionUserId();
+    if (sessionId) {
+      const u = userList.find(u => u.id === sessionId);
+      if (u) setCurrentUser(u);
+    }
+    setLoading(false);
   }, []);
 
   const isProfileRegistered = useCallback((profileId: string): boolean => {
@@ -74,12 +86,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const hashedPin = await hashPin(pin);
 
-    const { error } = await supabase.from('profiles').update({
-      pin_hash: hashedPin,
-      last_login_at: new Date().toISOString(),
-    }).eq('id', profileId);
-
-    if (error) return 'Failed to register: ' + error.message;
+    const profiles = loadProfiles();
+    const idx = profiles.findIndex(p => p.id === profileId);
+    if (idx >= 0) {
+      profiles[idx].pin_hash = hashedPin;
+      profiles[idx].last_login_at = new Date().toISOString();
+    }
+    saveProfiles(profiles);
 
     setProfileHashes(prev => ({ ...prev, [profileId]: hashedPin }));
 
@@ -110,9 +123,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!user) return 'User data not found';
     if (!user.active) return 'Account has been deactivated';
 
-    // Update last_login_at in Supabase
     const now = new Date().toISOString();
-    await supabase.from('profiles').update({ last_login_at: now }).eq('id', profileId);
+    const profiles = loadProfiles();
+    const idx = profiles.findIndex(p => p.id === profileId);
+    if (idx >= 0) {
+      profiles[idx].last_login_at = now;
+      saveProfiles(profiles);
+    }
 
     const updated = { ...user, lastLoginAt: now };
     setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
@@ -133,7 +150,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const updateUserRole = useCallback((userId: string, role: UserRole) => {
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, role } : u));
-    supabase.from('profiles').update({ role }).eq('id', userId);
+    const profiles = loadProfiles();
+    const idx = profiles.findIndex(p => p.id === userId);
+    if (idx >= 0) { profiles[idx].role = role; saveProfiles(profiles); }
   }, []);
 
   const deactivateUser = useCallback((userId: string) => {
@@ -144,16 +163,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, active: true } : u));
   }, []);
 
-  const refreshUsers = useCallback(async () => {
-    const { data } = await supabase.from('profiles').select('*');
-    if (data) {
-      setUsers(data.map(profileToUser));
-      const hashes: Record<string, string> = {};
-      for (const p of data) {
-        if (p.pin_hash) hashes[p.id] = p.pin_hash;
-      }
-      setProfileHashes(hashes);
+  const refreshUsers = useCallback(() => {
+    const profiles = loadProfiles();
+    setUsers(profiles.map(profileToUser));
+    const hashes: Record<string, string> = {};
+    for (const p of profiles) {
+      if (p.pin_hash) hashes[p.id as string] = p.pin_hash as string;
     }
+    setProfileHashes(hashes);
   }, []);
 
   return (

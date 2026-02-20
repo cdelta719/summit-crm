@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../../utils/supabase';
+import { localDB } from '../../utils/local-storage';
 import { useAuth } from '../../store/AuthContext';
 
 interface MeetingNote {
@@ -65,7 +65,7 @@ export default function MeetingNotesSection({
   });
 
   const fetchNotes = useCallback(async () => {
-    const { data } = await supabase
+    const { data } = await localDB
       .from('meeting_notes')
       .select('*')
       .eq('lead_id', entityId)
@@ -75,17 +75,17 @@ export default function MeetingNotesSection({
 
   useEffect(() => {
     fetchNotes();
-    const channel = supabase
+    const channel = localDB
       .channel(`meeting-notes-${entityId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'meeting_notes', filter: `lead_id=eq.${entityId}` }, () => fetchNotes())
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => { localDB.removeChannel(channel); };
   }, [entityId, fetchNotes]);
 
   const handleSave = async () => {
     if (!currentUser) return;
     setSaving(true);
-    await supabase.from('meeting_notes').insert({
+    await localDB.from('meeting_notes').insert({
       lead_id: entityId,
       company_name: companyName,
       contact_name: contactName,
