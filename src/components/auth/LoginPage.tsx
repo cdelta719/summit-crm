@@ -110,22 +110,22 @@ export default function LoginPage() {
         {screen === 'select' && (
           <div className="animate-fadeIn">
             <p className="text-center text-sm text-gray-500 mb-6">Select your profile to continue</p>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="flex justify-center">
               {PROFILES.map(profile => {
                 const registered = isProfileRegistered(profile.id);
                 return (
                   <button
                     key={profile.id}
                     onClick={() => handleProfileClick(profile)}
-                    className="group flex flex-col items-center gap-2 p-4 rounded-2xl border border-gray-200 hover:border-gray-300 hover:shadow-lg transition-all duration-200 bg-white"
+                    className="group flex flex-col items-center gap-3 p-6 rounded-2xl border border-gray-200 hover:border-gray-300 hover:shadow-lg transition-all duration-200 bg-white"
                   >
                     <div
-                      className="w-16 h-16 rounded-full flex items-center justify-center text-white text-lg font-bold shadow-md group-hover:scale-105 transition-transform"
+                      className="w-20 h-20 rounded-full flex items-center justify-center text-white text-xl font-bold shadow-md group-hover:scale-105 transition-transform"
                       style={{ backgroundColor: profile.color }}
                     >
                       {profile.initials}
                     </div>
-                    <span className="text-sm font-semibold text-gray-900">{profile.name}</span>
+                    <span className="text-base font-semibold text-gray-900">{profile.name}</span>
                     {registered ? (
                       <span className="text-xs text-green-600 font-medium">✅</span>
                     ) : (
